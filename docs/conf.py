@@ -14,8 +14,8 @@ if not hasattr(autodoc, "logger"):
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Advance_Moonraker_Control"
-copyright = "2023, Marc-Olivier Arsenault, Eric Tremblay"
-author = "Marc-Olivier Arsenault, Eric Tremblay"
+copyright = "2026, Thalia Montreux"
+author = "Thalia Montreux"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
