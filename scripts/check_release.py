@@ -3,7 +3,7 @@
 import argparse
 import ast
 import configparser
-import datetime
+import datetime as dt
 import json
 from pathlib import Path
 import re
@@ -29,7 +29,7 @@ def validate(root: Path, tag: str | None = None) -> str:
     if not re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", version):
         raise ValueError("Release version must use YYYY.MM.DD format")
     try:
-        datetime.date.fromisoformat(version.replace(".", "-"))
+        dt.date.fromisoformat(version.replace(".", "-"))
     except ValueError as exc:
         raise ValueError(f"Not a real calendar date: {version}") from exc
     if tag is not None and tag != f"v{version}":
