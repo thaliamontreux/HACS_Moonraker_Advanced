@@ -1144,8 +1144,17 @@
       }
       .camera-grid[data-layout="1x2"],
       .camera-grid[data-layout="2x2"],
+      .dashboard-camera-grid[data-layout="3"],
       .dashboard-camera-grid[data-layout="4"] {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .camera-grid[data-layout="2x4"],
+      .camera-grid[data-layout="4x4"] {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .camera-rotate-select {
+        flex: 0 0 auto;
+        max-width: 58px;
       }
       .camera-tile,
       .dashboard-camera-tile {
@@ -1875,6 +1884,11 @@
         .toolpath-box {
           height: clamp(260px, 52vh, 420px);
         }
+        .camera-grid[data-layout="2x4"],
+        .camera-grid[data-layout="4x4"] {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .dashboard-camera-grid[data-layout="3"],
         .dashboard-camera-grid[data-layout="4"] {
           grid-template-columns: minmax(0, 1fr);
         }
@@ -2138,6 +2152,7 @@
               >
                 <option value="1">1 camera</option>
                 <option value="2">2 cameras stacked</option>
+                <option value="3">3 cameras</option>
                 <option value="4">4 cameras</option>
               </select></label
             >
@@ -3527,6 +3542,8 @@
                         <option value="1x1">1 × 1</option>
                         <option value="1x2">1 × 2</option>
                         <option value="2x2">2 × 2</option>
+                        <option value="2x4">2 × 4</option>
+                        <option value="4x4">4 × 4</option>
                       </select>
                     </div>
                   </div>

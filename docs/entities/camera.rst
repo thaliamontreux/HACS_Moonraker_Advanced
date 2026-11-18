@@ -30,7 +30,14 @@ Similarly to the camera, the thumbnail port can be configured.
 Camera Rotation
 -------------------------------------
 
-If you want to rotate the camera image, you can do so by changing the dashboard layout. Using `card mod <https://github.com/thomasloven/lovelace-card-mod>`__.
+The built-in panel supports per-camera rotation without any extra cards.
+On the Camera page, each tile has a rotation selector (0°, 90°, 180°, or
+270°), and the same option is available per tile in the dashboard camera
+configuration. The setting is stored per camera and per printer, so it
+applies everywhere that camera is shown.
+
+If you want to rotate the camera image in a regular dashboard, you can do
+so by changing the dashboard layout. Using `card mod <https://github.com/thomasloven/lovelace-card-mod>`__.
 
 With the extension installed, just modify your layout yaml. (apply the appropriate rotation (90, 180, 270))
 

@@ -141,6 +141,8 @@ let thumbnailObjectUrl = null;
 let cameraLayout = "1x1";
 let cameraAssignments = [];
 let cameraGridSignature = "";
+let cameraRotations = {};
+let cameraRotationPrefsKey = "";
 let dashboardCameraLayout = "1";
 let dashboardCameraAssignments = [];
 let dashboardCameraSignature = "";
@@ -2393,6 +2395,68 @@ function dashboardCameraStorageKey() {
   return `nexus-dashboard-cameras:${printer || "default"}`;
 }
 
+function cameraRotationStorageKey() {
+  return `nexus-camera-rotation:${printer || "default"}`;
+}
+
+function loadCameraRotations() {
+  const key = cameraRotationStorageKey();
+  if (cameraRotationPrefsKey === key) return;
+  cameraRotationPrefsKey = key;
+  cameraRotations = {};
+  try {
+    const saved = JSON.parse(window.localStorage?.getItem(key) || "null");
+    if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+      Object.entries(saved).forEach(([name, degrees]) => {
+        if ([90, 180, 270].includes(Number(degrees)))
+          cameraRotations[String(name)] = Number(degrees);
+      });
+    }
+  } catch (_error) {
+    // Rotation preferences are optional; unavailable storage falls back to none.
+  }
+}
+
+function saveCameraRotations() {
+  try {
+    window.localStorage?.setItem(
+      cameraRotationStorageKey(),
+      JSON.stringify(cameraRotations),
+    );
+  } catch (_error) {
+    // Rotations still apply for this session if storage is unavailable.
+  }
+}
+
+function setCameraRotation(name, degrees) {
+  if (!name) return;
+  if ([90, 180, 270].includes(Number(degrees)))
+    cameraRotations[name] = Number(degrees);
+  else delete cameraRotations[name];
+  saveCameraRotations();
+}
+
+function applyCameraRotation(image, camera) {
+  const degrees = Number(cameraRotations[camera?.name]) || 0;
+  image.dataset.rotation = String(degrees);
+  if (!degrees) {
+    image.style.transform = "";
+    return;
+  }
+  let scale = 1;
+  if (degrees !== 180) {
+    const rect = image.getBoundingClientRect?.() || {};
+    if (rect.width > 0 && rect.height > 0)
+      scale = Number(
+        Math.min(rect.width / rect.height, rect.height / rect.width).toFixed(4),
+      );
+  }
+  image.style.transform =
+    scale === 1
+      ? `rotate(${degrees}deg)`
+      : `rotate(${degrees}deg) scale(${scale})`;
+}
+
 function loadDashboardCameraPrefs() {
   const key = dashboardCameraStorageKey();
   if (dashboardCameraPrefsKey === key) return;
@@ -2401,7 +2465,7 @@ function loadDashboardCameraPrefs() {
   dashboardCameraAssignments = [];
   try {
     const saved = JSON.parse(window.localStorage?.getItem(key) || "null");
-    if (["1", "2", "4"].includes(String(saved?.layout)))
+    if (["1", "2", "3", "4"].includes(String(saved?.layout)))
       dashboardCameraLayout = String(saved.layout);
     if (Array.isArray(saved?.assignments))
       dashboardCameraAssignments = saved.assignments.slice(0, 4).map(String);
@@ -2480,11 +2544,9 @@ function renderDashboardCameras() {
         availableWebcams,
         dashboardCameraAssignments[index],
       );
-      const streamActive = setCameraImage(
-        tile.querySelector("img"),
-        camera,
-        dashboardVisible,
-      );
+      const image = tile.querySelector("img");
+      const streamActive = setCameraImage(image, camera, dashboardVisible);
+      applyCameraRotation(image, camera);
       const placeholder = tile.querySelector(".camera-tile-empty");
       placeholder.textContent = !camera?.name
         ? "NO CAMERA ASSIGNED"
@@ -2537,10 +2599,28 @@ function renderDashboardCameraConfig() {
       option.textContent = camera.name;
       select.appendChild(option);
     });
-    select.value =
+    const cameraName =
       cameraFor(availableWebcams, dashboardCameraAssignments[index])?.name ||
       "";
-    label.append(text, select);
+    select.value = cameraName;
+    const rotate = document.createElement("select");
+    rotate.className = "camera-rotate-select";
+    rotate.dataset.dashboardCameraRotate = String(index);
+    rotate.setAttribute("aria-label", `Rotate dashboard tile ${index + 1}`);
+    [
+      ["0", "0°"],
+      ["90", "90°"],
+      ["180", "180°"],
+      ["270", "270°"],
+    ].forEach(([value, labelText]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = labelText;
+      rotate.appendChild(option);
+    });
+    rotate.value = String(Number(cameraRotations[cameraName]) || 0);
+    rotate.disabled = !cameraName;
+    label.append(text, select, rotate);
     list.appendChild(label);
   }
   setText(
@@ -2573,10 +2653,12 @@ function renderCamera(webcams) {
       }))
     : [];
   loadDashboardCameraPrefs();
+  loadCameraRotations();
   const cameraPageVisible = activeScreen === "camera";
   const layoutSelect = byId("cameraLayout");
   if (layoutSelect?.value) cameraLayout = layoutSelect.value;
-  const tileCount = cameraLayout === "2x2" ? 4 : cameraLayout === "1x2" ? 2 : 1;
+  const tileCount =
+    { "1x1": 1, "1x2": 2, "2x2": 4, "2x4": 8, "4x4": 16 }[cameraLayout] || 1;
   resolveCameraAssignments(availableWebcams, cameraAssignments, tileCount);
 
   const grid = byId("cameraGrid");
@@ -2588,8 +2670,12 @@ function renderCamera(webcams) {
   const signature = `${cameraLayout}/${sourceSignature}`;
   grid.dataset.layout = cameraLayout;
   grid.style.display = availableWebcams.length ? "grid" : "none";
+  const columnCount =
+    { "1x2": 2, "2x2": 2, "2x4": 4, "4x4": 4 }[cameraLayout] || 1;
   grid.style.gridTemplateColumns =
-    cameraLayout === "1x1" ? "minmax(0,1fr)" : "repeat(2,minmax(0,1fr))";
+    columnCount === 1
+      ? "minmax(0,1fr)"
+      : `repeat(${columnCount},minmax(0,1fr))`;
   if (signature !== cameraGridSignature) {
     cameraGridSignature = signature;
     grid.replaceChildren();
@@ -2611,11 +2697,26 @@ function renderCamera(webcams) {
         option.textContent = camera.name;
         selector.appendChild(option);
       });
+      const rotate = document.createElement("select");
+      rotate.className = "camera-rotate-select";
+      rotate.dataset.cameraRotate = String(index);
+      rotate.setAttribute("aria-label", `Rotate camera tile ${index + 1}`);
+      [
+        ["0", "0°"],
+        ["90", "90°"],
+        ["180", "180°"],
+        ["270", "270°"],
+      ].forEach(([value, label]) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        rotate.appendChild(option);
+      });
       const fullscreen = document.createElement("button");
       fullscreen.type = "button";
       fullscreen.dataset.cameraFullscreen = "";
       fullscreen.textContent = "FULLSCREEN";
-      header.append(selector, fullscreen);
+      header.append(selector, rotate, fullscreen);
       const image = document.createElement("img");
       image.alt = `Printer camera ${index + 1}`;
       image.loading = "lazy";
@@ -2645,9 +2746,13 @@ function renderCamera(webcams) {
       (item) => item.name === cameraAssignments[index],
     );
     selector.value = camera?.name || "";
+    const rotateSelect = tile.querySelector("[data-camera-rotate]");
+    rotateSelect.value = String(Number(cameraRotations[camera?.name]) || 0);
+    rotateSelect.disabled = !camera?.name;
     const image = tile.querySelector("img");
     const placeholder = tile.querySelector(".camera-tile-empty");
     const streamActive = setCameraImage(image, camera, cameraPageVisible);
+    applyCameraRotation(image, camera);
     placeholder.textContent = !camera?.name
       ? "NO CAMERA ASSIGNED"
       : !camera.stream_url
@@ -2882,6 +2987,8 @@ function switchPrinter() {
   availableWebcams = [];
   cameraAssignments = [];
   cameraGridSignature = "";
+  cameraRotations = {};
+  cameraRotationPrefsKey = "";
   renderCamera(availableWebcams);
   selectedFile = "";
   lastThumbnailKey = "";
@@ -3471,6 +3578,23 @@ function bindInteractions() {
     if (target.matches("[data-camera-slot]")) {
       cameraAssignments[Number(target.dataset.cameraSlot)] = target.value;
       renderCamera(availableWebcams);
+    }
+    if (target.matches("[data-camera-rotate]")) {
+      setCameraRotation(
+        cameraAssignments[Number(target.dataset.cameraRotate)],
+        target.value,
+      );
+      renderCamera(availableWebcams);
+    }
+    if (target.matches("[data-dashboard-camera-rotate]")) {
+      setCameraRotation(
+        dashboardCameraAssignments[
+          Number(target.dataset.dashboardCameraRotate)
+        ],
+        target.value,
+      );
+      renderCamera(availableWebcams);
+      renderDashboardCameraConfig();
     }
     if (target.matches("[data-dashboard-camera-slot]")) {
       dashboardCameraAssignments[Number(target.dataset.dashboardCameraSlot)] =

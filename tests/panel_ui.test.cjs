@@ -272,7 +272,7 @@ function deepText(element) {
   return [element.textContent, ...element.children.map(deepText)].join(" ");
 }
 
-test("camera page supports 1x1, 1x2, and 2x2 layouts and pauses hidden streams", () => {
+test("camera page supports all grid layouts and pauses hidden streams", () => {
   const { context, document } = createPanelClient();
   context.webcams = [
     {
@@ -287,6 +287,8 @@ test("camera page supports 1x1, 1x2, and 2x2 layouts and pauses hidden streams",
     ["1x1", 1],
     ["1x2", 2],
     ["2x2", 4],
+    ["2x4", 8],
+    ["4x4", 16],
   ]) {
     document.getElementById("cameraLayout").value = layout;
     vm.runInContext(
@@ -337,6 +339,135 @@ test("camera selectors can assign a source to a tile", () => {
     context,
   );
   assert.equal(tiles[1].querySelector("img").src, "http://camera/front");
+});
+
+test("camera rotation applies per-camera transforms and persists per printer", () => {
+  const { context, document, window } = createPanelClient();
+  context.webcams = [
+    { name: "Front", stream_url: "http://camera/front" },
+    { name: "Side", stream_url: "http://camera/side" },
+  ];
+  document.getElementById("cameraLayout").value = "1x2";
+  vm.runInContext(
+    'printer = "printer-a"; activeScreen = "camera"; cameraLayout = "1x2"; ' +
+      'cameraGridSignature = ""; renderCamera(webcams);',
+    context,
+  );
+  const tiles = document
+    .getElementById("cameraGrid")
+    .querySelectorAll(".camera-tile");
+  const rotateSelects = tiles.map((tile) =>
+    tile.querySelector("[data-camera-rotate]"),
+  );
+  assert.equal(rotateSelects[0].value, "0");
+  assert.ok(rotateSelects.every((select) => !select.disabled));
+
+  vm.runInContext(
+    'setCameraRotation("Front", 270); renderCamera(webcams);',
+    context,
+  );
+  const rotated = document
+    .getElementById("cameraGrid")
+    .querySelectorAll(".camera-tile");
+  const frontImage = rotated[0].querySelector("img");
+  assert.equal(frontImage.dataset.rotation, "270");
+  assert.equal(frontImage.style.transform, "rotate(270deg)");
+  assert.equal(rotated[0].querySelector("[data-camera-rotate]").value, "270");
+  assert.equal(rotated[1].querySelector("img").dataset.rotation, "0");
+  assert.equal(rotated[1].querySelector("img").style.transform, "");
+
+  const dashboardImage = document
+    .getElementById("dashboardCameraGrid")
+    .querySelectorAll(".dashboard-camera-tile")[0]
+    .querySelector("img");
+  assert.equal(dashboardImage.dataset.rotation, "270");
+  assert.equal(dashboardImage.style.transform, "rotate(270deg)");
+
+  const saved = JSON.parse(
+    window.localStorage.getItem("nexus-camera-rotation:printer-a"),
+  );
+  assert.equal(saved.Front, 270);
+
+  vm.runInContext(
+    'setCameraRotation("Front", 180); renderCamera(webcams);',
+    context,
+  );
+  assert.equal(
+    document
+      .getElementById("cameraGrid")
+      .querySelectorAll(".camera-tile")[0]
+      .querySelector("img").style.transform,
+    "rotate(180deg)",
+  );
+
+  vm.runInContext(
+    'setCameraRotation("Front", 0); renderCamera(webcams);',
+    context,
+  );
+  const cleared = document
+    .getElementById("cameraGrid")
+    .querySelectorAll(".camera-tile")[0]
+    .querySelector("img");
+  assert.equal(cleared.dataset.rotation, "0");
+  assert.equal(cleared.style.transform, "");
+  assert.equal(
+    JSON.parse(
+      window.localStorage.getItem("nexus-camera-rotation:printer-a"),
+    ).Front,
+    undefined,
+  );
+});
+
+test("dashboard supports a three-camera layout and rotation selects", () => {
+  const { context, document } = createPanelClient();
+  context.webcams = [
+    { name: "Front", stream_url: "http://camera/front" },
+    { name: "Side", stream_url: "http://camera/side" },
+  ];
+  vm.runInContext(
+    'printer = "printer-a"; activeScreen = "dashboard"; cameraConfigOpen = true; ' +
+      'renderCamera(webcams); bindInteractions();',
+    context,
+  );
+  const change = document.listeners.change;
+  change({
+    target: {
+      id: "dashboardCameraLayout",
+      value: "3",
+      matches: () => false,
+    },
+  });
+  assert.equal(
+    document
+      .getElementById("dashboardCameraGrid")
+      .querySelectorAll(".dashboard-camera-tile").length,
+    3,
+  );
+  const options = document.getElementById("dashboardCameraOptions");
+  assert.equal(options.children.length, 3);
+  const rotateSelect = options.children[0].querySelector(
+    "[data-dashboard-camera-rotate]",
+  );
+  assert.equal(rotateSelect.value, "0");
+
+  change({
+    target: {
+      id: "",
+      value: "90",
+      dataset: { dashboardCameraRotate: "0" },
+      matches: (selector) => selector === "[data-dashboard-camera-rotate]",
+    },
+  });
+  const firstTileImage = document
+    .getElementById("dashboardCameraGrid")
+    .querySelectorAll(".dashboard-camera-tile")[0]
+    .querySelector("img");
+  assert.equal(firstTileImage.dataset.rotation, "90");
+  assert.equal(firstTileImage.style.transform, "rotate(90deg)");
+  assert.equal(
+    options.children[0].querySelector("[data-dashboard-camera-rotate]").value,
+    "90",
+  );
 });
 
 test("dashboard renders one, two, and four selected camera streams", () => {
